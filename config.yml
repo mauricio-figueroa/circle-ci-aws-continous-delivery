@@ -1,0 +1,42 @@
+defaults: &defaults
+  working_directory: /tmp/_circleci_local_build_repo
+
+
+dependencies:
+  pre:
+    - sudo pip install awscli
+
+
+workflows:
+  version: 2
+  deploy:
+    jobs:
+      - deploy_master:
+          filters:
+            branches:
+              only:
+                - circle-ci
+  test:
+    jobs:
+     - test_job:
+          filters:
+            branches:
+              ignore:
+                - circle-ci
+
+
+jobs:
+  deploy_master:
+    steps:
+      - checkout
+      - run: sudo chmod 777 circle-ci-setup-aws-user.sh
+      - run: sudo ./circle-ci-setup-aws-user.sh
+      - run: git config --global user.email "sistemas@cash-online.com.ar"
+      - run: git config --global user.name "Cash Online"
+      - run: ./circle-ci-deploy-staging.sh -env cash-api-staging
+    machine: true
+  test_job:
+    steps:
+      - checkout
+      - run: mvn clean test
+    machine: true
