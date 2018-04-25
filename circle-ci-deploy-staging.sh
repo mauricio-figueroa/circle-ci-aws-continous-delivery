@@ -2,7 +2,7 @@
 #!/bin/bash
 
 ENVIRONMENT=
-NOW="$(date +'%Y-%m-%d_%H'%M)"
+NOW="$(date +'%Y-%m-%d')"
 SEPARATOR="-"
 ZIP_EXTENSION=".zip"
 S3_URL="s3://elasticbeanstalk-sa-east-1-980074370134/com/cash/app/"
@@ -59,7 +59,10 @@ validateArguments
 MVN_VERSION=$( mvn org.apache.maven.plugins:maven-help-plugin:2.1.1:evaluate -Dexpression=project.version | grep -v '\[')
 MVN_ARTIFACT=$( mvn org.apache.maven.plugins:maven-help-plugin:2.1.1:evaluate -Dexpression=project.artifactId | grep -v '\[')
 
-ZIP_FINAL_NAME="$MVN_ARTIFACT$SEPARATOR$CIRCLE_BUILD_NUM$ZIP_EXTENSION"
+ZIP_FINAL_NAME="$MVN_ARTIFACT$SEPARATOR$NOW$SEPARATOR$CIRCLE_BUILD_NUM$ZIP_EXTENSION"
+#ZIP_FINAL_NAME="$MVN_ARTIFACT$SEPARATOR$MVN_VERSION$SEPARATOR$NOW$SEPARATOR$ZIP_EXTENSION"
+#ZIP_FINAL_NAME="0.0.1-SNAPSHOT-2018-04-24.zip"
+
 
 log "INFO" "INFO PARAMS"
 log "INFO" "=================="
@@ -74,8 +77,10 @@ if [[ $rc -ne 0 ]] ; then
   exit $rc
 fi
 mv target/api*.jar target/api.jar
+cp Procfile.$ENVIRONMENT Procfile
 zip -r -j  app.zip target/newrelic/newrelic.jar   target/api.jar Procfile src/main/resources/newrelic.yml
 zip -r  app.zip ./.ebextensions/
+rm Procfile
 
 log "INFO" "=================="
 log "INFO" "Zip Success ==> Zip name: $ZIP_FINAL_NAME"
@@ -83,8 +88,15 @@ log "INFO" "=================="
 
 log "INFO" "Trying to upload zip file to AWS S3"
 
+mv app.zip "$ZIP_FINAL_NAME"
+aws s3  cp "$ZIP_FINAL_NAME" "$S3_URL"
 
-aws s3  cp app.zip "$S3_URL$ZIP_FINAL_NAME"
+rc=$?
+if [[ $rc -ne 0 ]] ; then
+  log "ERROR" "Upload to s3 Failure";
+  exit $rc
+fi
+
 
 log "INFO" "=================="
 log "INFO" "Upload Success ==> Zip name: $ZIP_FINAL_NAME"
@@ -95,7 +107,14 @@ log "INFO" "=================="
 log "INFO" "Trying to create application version"
 log "INFO" "=================="
 
-aws elasticbeanstalk create-application-version --application-name cash-api --version-label $ZIP_FINAL_NAME --source-bundle "S3Bucket=elasticbeanstalk-sa-east-1-980074370134,S3Key=com/cash/app/$ZIP_FINAL_NAME" --region sa-east-1
+aws elasticbeanstalk create-application-version --application-name cash-api --version-label "$ZIP_FINAL_NAME" --source-bundle "S3Bucket=elasticbeanstalk-sa-east-1-980074370134,S3Key=com/cash/app/$ZIP_FINAL_NAME" --region sa-east-1
+
+
+rc=$?
+if [[ $rc -ne 0 ]] ; then
+  log "ERROR" "Application version create Failure";
+  exit $rc
+fi
 
 
 log "INFO" "=================="
@@ -109,12 +128,26 @@ log "INFO" "=================="
 
 aws elasticbeanstalk update-environment --environment-name $ENVIRONMENT --version-label $ZIP_FINAL_NAME --region sa-east-1
 
+rc=$?
+if [[ $rc -ne 0 ]] ; then
+  log "ERROR" "Deploy Failure";
+  exit $rc
+fi
 
-git tag -a $ZIP_FINAL_NAME -m "$ZIP_FINAL_NAME"
+
+
+git tag -a "$ZIP_FINAL_NAME" -m "$ZIP_FINAL_NAME"
 git push https://$CASH_BITBUCKET_USER:$CASH_BITBUCKET_PASSWORD@bitbucket.org/transconteam/cash-api.git --tags
+
+rc=$?
+if [[ $rc -ne 0 ]] ; then
+  log "ERROR" "Git tag Failure";
+  exit $rc
+fi
 
 
 
 ##############
 ## End Main
 ##############
+
