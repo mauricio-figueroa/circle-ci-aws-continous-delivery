@@ -11,11 +11,16 @@ workflows:
   version: 2
   deploy:
     jobs:
-      - deploy_master:
+      - deploy_master_staging:
           filters:
             branches:
               only:
                 - circle-ci
+      - deploy_master_prod:
+            type: approval
+            requires:
+              - deploy_master_staging
+
   test:
     jobs:
      - test_job:
@@ -26,17 +31,24 @@ workflows:
 
 
 jobs:
-  deploy_master:
+  deploy_master_staging:
     steps:
       - checkout
       - run: sudo chmod 777 circle-ci-setup-aws-user.sh
       - run: sudo ./circle-ci-setup-aws-user.sh
       - run: git config --global user.email "sistemas@cash-online.com.ar"
       - run: git config --global user.name "Cash Online"
-      - run: ./circle-ci-deploy-staging.sh -env cash-api-staging
+      - run: ./circle-ci-deploy-staging.sh -env cash-api-stg
     machine: true
   test_job:
     steps:
       - checkout
       - run: mvn clean test
     machine: true
+
+  deploy_master_prod:
+      steps:
+        - checkout
+        - run: mvn clean test
+      machine: true
+
